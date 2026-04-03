@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Dashboard</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+<div class="page-shell">
+    <div class="hero">
+        <div class="hero-copy">
+            <p class="eyebrow">Student Dashboard</p>
+            <h1>Your profile, marks sheet, and attendance</h1>
+            <p>Everything is loaded via AJAX so semester filtering and attendance marking happen without page reloads.</p>
+        </div>
+        <div class="toolbar-actions">
+            <span id="studentBadge" class="pill"></span>
+            <button class="danger" onclick="logout()">Logout</button>
+        </div>
+    </div>
+
+    <div id="studentMessage" class="message"></div>
+
+    <div class="panel-grid">
+        <section class="panel">
+            <h3>Profile</h3>
+            <div class="stats">
+                <div class="stat">
+                    <span>Name</span>
+                    <strong id="profileName">-</strong>
+                </div>
+                <div class="stat">
+                    <span>Roll No</span>
+                    <strong id="profileRollNo">-</strong>
+                </div>
+                <div class="stat">
+                    <span>Department</span>
+                    <strong id="profileDepartment">-</strong>
+                </div>
+                <div class="stat">
+                    <span>Semester</span>
+                    <strong id="profileSemester">-</strong>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h3>Attendance</h3>
+            <p>Attendance can only be marked once per day.</p>
+            <button id="markAttendanceBtn" type="button">Mark Today's Attendance</button>
+            <table>
+                <thead>
+                <tr>
+                    <th>Recent Dates</th>
+                </tr>
+                </thead>
+                <tbody id="attendanceTableBody"></tbody>
+            </table>
+        </section>
+
+        <section class="panel full-width">
+            <div class="toolbar">
+                <div>
+                    <h3>Marks Sheet</h3>
+                    <p>Filter by semester or load the full marks history.</p>
+                </div>
+                <div class="toolbar-actions">
+                    <input type="number" id="semesterFilter" min="1" placeholder="Semester">
+                    <button id="filterMarksBtn" type="button">Filter</button>
+                    <button class="secondary" id="loadAllMarksBtn" type="button">Load All</button>
+                </div>
+            </div>
+            <table>
+                <thead>
+                <tr>
+                    <th>Subject</th>
+                    <th>Marks</th>
+                    <th>Semester</th>
+                </tr>
+                </thead>
+                <tbody id="marksTableBody"></tbody>
+            </table>
+        </section>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="/js/app.js"></script>
+<script>
+    function loadProfile() {
+        $.get("/api/student/profile", function (response) {
+            const profile = response.data;
+            $("#profileName").text(profile.name);
+            $("#profileRollNo").text(profile.rollNo);
+            $("#profileDepartment").text(profile.department || "-");
+            $("#profileSemester").text(profile.semester || "-");
+        }).fail(function (xhr) {
+            handleAjaxError(xhr, "#studentMessage");
+        });
+    }
+
+    function renderMarks(marks) {
+        const tbody = $("#marksTableBody");
+        tbody.empty();
+        if (!marks.length) {
+            tbody.append('<tr><td colspan="3">No marks found.</td></tr>');
+            return;
+        }
+        $.each(marks, function (_, mark) {
+            tbody.append(
+                "<tr>" +
+                "<td>" + mark.subject + "</td>" +
+                "<td>" + mark.marks + "</td>" +
+                "<td>" + mark.semester + "</td>" +
+                "</tr>"
+            );
+        });
+    }
+
+    function renderAttendance(attendanceList) {
+        const tbody = $("#attendanceTableBody");
+        tbody.empty();
+        if (!attendanceList.length) {
+            tbody.append('<tr><td>No attendance recorded yet.</td></tr>');
+            return;
+        }
+        $.each(attendanceList, function (_, item) {
+            tbody.append("<tr><td>" + item.attendanceDate + "</td></tr>");
+        });
+    }
+
+    function loadMarks(semester) {
+        const url = semester ? "/api/student/marks?semester=" + semester : "/api/student/marks";
+        $.get(url, function (response) {
+            renderMarks(response.data);
+        }).fail(function (xhr) {
+            handleAjaxError(xhr, "#studentMessage");
+        });
+    }
+
+    function loadAttendance() {
+        $.get("/api/student/attendance", function (response) {
+            renderAttendance(response.data);
+        }).fail(function (xhr) {
+            handleAjaxError(xhr, "#studentMessage");
+        });
+    }
+
+    $(function () {
+        fetchCurrentUser(function (user) {
+            if (user.role !== "STUDENT") {
+                window.location.href = "/admin-dashboard.html";
+                return;
+            }
+            $("#studentBadge").text(user.name + " (" + user.role + ")");
+            loadProfile();
+            loadMarks();
+            loadAttendance();
+        });
+
+        $("#filterMarksBtn").on("click", function () {
+            clearMessage("#studentMessage");
+            loadMarks($("#semesterFilter").val());
+        });
+
+        $("#loadAllMarksBtn").on("click", function () {
+            $("#semesterFilter").val("");
+            clearMessage("#studentMessage");
+            loadMarks();
+        });
+
+        $("#markAttendanceBtn").on("click", function () {
+            clearMessage("#studentMessage");
+            $.ajax({
+                url: "/api/student/attendance",
+                method: "POST",
+                success: function (response) {
+                    showMessage("#studentMessage", response.message + " Date: " + response.data.attendanceDate, "success");
+                    loadAttendance();
+                },
+                error: function (xhr) {
+                    handleAjaxError(xhr, "#studentMessage");
+                }
+            });
+        });
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+<div class="page-shell">
+    <div class="hero">
+        <div class="hero-copy">
+            <p class="eyebrow">Admin Dashboard</p>
+            <h1>Manage students, departments, and marks</h1>
+            <p>Create student accounts, assign departments and semesters, then publish marks without reloading the page.</p>
+        </div>
+        <div class="toolbar-actions">
+            <span id="adminBadge" class="pill"></span>
+            <button class="danger" onclick="logout()">Logout</button>
+        </div>
+    </div>
+
+    <div id="adminMessage" class="message"></div>
+
+    <div class="panel-grid">
+        <section class="panel">
+            <h3>Add Student</h3>
+            <form id="studentForm">
+                <label>Name
+                    <input type="text" id="studentName" required>
+                </label>
+                <label>Email
+                    <input type="email" id="studentEmail" required>
+                </label>
+                <label>Password
+                    <input type="password" id="studentPassword" required>
+                </label>
+                <label>Roll No
+                    <input type="text" id="studentRollNo" required>
+                </label>
+                <button type="submit">Create Student</button>
+            </form>
+        </section>
+
+        <section class="panel">
+            <h3>Add Department</h3>
+            <form id="departmentForm">
+                <label>Department Name
+                    <input type="text" id="departmentName" required>
+                </label>
+                <button type="submit">Create Department</button>
+            </form>
+        </section>
+
+        <section class="panel">
+            <h3>Assign Department & Semester</h3>
+            <form id="assignmentForm">
+                <label>Student
+                    <select id="assignStudentId" required></select>
+                </label>
+                <label>Department
+                    <select id="assignDepartmentId" required></select>
+                </label>
+                <label>Semester
+                    <input type="number" id="assignSemester" min="1" required>
+                </label>
+                <button type="submit">Assign Student</button>
+            </form>
+        </section>
+
+        <section class="panel">
+            <h3>Upload Marks</h3>
+            <form id="marksForm">
+                <label>Student
+                    <select id="markStudentId" required></select>
+                </label>
+                <label>Subject
+                    <input type="text" id="subject" required>
+                </label>
+                <label>Marks
+                    <input type="number" id="marks" min="0" max="100" required>
+                </label>
+                <label>Semester
+                    <input type="number" id="marksSemester" min="1" required>
+                </label>
+                <button type="submit">Upload Marks</button>
+            </form>
+        </section>
+
+        <section class="panel full-width">
+            <div class="toolbar">
+                <div>
+                    <h3>Students</h3>
+                    <p>Live data loaded through REST APIs.</p>
+                </div>
+                <button class="secondary" id="refreshAdminData" type="button">Refresh Data</button>
+            </div>
+            <table>
+                <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Roll No</th>
+                    <th>Department</th>
+                    <th>Semester</th>
+                </tr>
+                </thead>
+                <tbody id="studentsTableBody"></tbody>
+            </table>
+        </section>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="/js/app.js"></script>
+<script>
+    function populateStudentOptions(students) {
+        const selects = $("#assignStudentId, #markStudentId");
+        selects.empty();
+        if (!students.length) {
+            selects.append('<option value="">No students available</option>');
+            return;
+        }
+        $.each(students, function (_, student) {
+            const option = '<option value="' + student.id + '">' + student.name + ' (' + student.rollNo + ')</option>';
+            selects.append(option);
+        });
+    }
+
+    function populateDepartmentOptions(departments) {
+        const select = $("#assignDepartmentId");
+        select.empty();
+        if (!departments.length) {
+            select.append('<option value="">No departments available</option>');
+            return;
+        }
+        $.each(departments, function (_, department) {
+            select.append('<option value="' + department.id + '">' + department.name + '</option>');
+        });
+    }
+
+    function renderStudents(students) {
+        const tbody = $("#studentsTableBody");
+        tbody.empty();
+        if (!students.length) {
+            tbody.append('<tr><td colspan="5">No students created yet.</td></tr>');
+            return;
+        }
+        $.each(students, function (_, student) {
+            tbody.append(
+                "<tr>" +
+                "<td>" + student.name + "</td>" +
+                "<td>" + student.email + "</td>" +
+                "<td>" + student.rollNo + "</td>" +
+                "<td>" + (student.department || "-") + "</td>" +
+                "<td>" + (student.semester || "-") + "</td>" +
+                "</tr>"
+            );
+        });
+    }
+
+    function loadAdminData() {
+        $.get("/api/admin/students", function (response) {
+            renderStudents(response.data);
+            populateStudentOptions(response.data);
+        }).fail(function (xhr) {
+            handleAjaxError(xhr, "#adminMessage");
+        });
+
+        $.get("/api/admin/departments", function (response) {
+            populateDepartmentOptions(response.data);
+        }).fail(function (xhr) {
+            handleAjaxError(xhr, "#adminMessage");
+        });
+    }
+
+    $(function () {
+        fetchCurrentUser(function (user) {
+            if (user.role !== "ADMIN") {
+                window.location.href = "/student-dashboard.html";
+                return;
+            }
+            $("#adminBadge").text(user.name + " (" + user.role + ")");
+            loadAdminData();
+        });
+
+        $("#refreshAdminData").on("click", loadAdminData);
+
+        $("#studentForm").on("submit", function (event) {
+            event.preventDefault();
+            clearMessage("#adminMessage");
+            $.ajax({
+                url: "/api/admin/students",
+                method: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({
+                    name: $("#studentName").val(),
+                    email: $("#studentEmail").val(),
+                    password: $("#studentPassword").val(),
+                    rollNo: $("#studentRollNo").val()
+                }),
+                success: function (response) {
+                    showMessage("#adminMessage", response.message, "success");
+                    $("#studentForm")[0].reset();
+                    loadAdminData();
+                },
+                error: function (xhr) {
+                    handleAjaxError(xhr, "#adminMessage");
+                }
+            });
+        });
+
+        $("#departmentForm").on("submit", function (event) {
+            event.preventDefault();
+            clearMessage("#adminMessage");
+            $.ajax({
+                url: "/api/admin/departments",
+                method: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({ name: $("#departmentName").val() }),
+                success: function (response) {
+                    showMessage("#adminMessage", response.message, "success");
+                    $("#departmentForm")[0].reset();
+                    loadAdminData();
+                },
+                error: function (xhr) {
+                    handleAjaxError(xhr, "#adminMessage");
+                }
+            });
+        });
+
+        $("#assignmentForm").on("submit", function (event) {
+            event.preventDefault();
+            clearMessage("#adminMessage");
+            $.ajax({
+                url: "/api/admin/students/assign",
+                method: "PUT",
+                contentType: "application/json",
+                data: JSON.stringify({
+                    studentId: Number($("#assignStudentId").val()),
+                    departmentId: Number($("#assignDepartmentId").val()),
+                    semester: Number($("#assignSemester").val())
+                }),
+                success: function (response) {
+                    showMessage("#adminMessage", response.message, "success");
+                    $("#assignmentForm")[0].reset();
+                    loadAdminData();
+                },
+                error: function (xhr) {
+                    handleAjaxError(xhr, "#adminMessage");
+                }
+            });
+        });
+
+        $("#marksForm").on("submit", function (event) {
+            event.preventDefault();
+            clearMessage("#adminMessage");
+            $.ajax({
+                url: "/api/admin/marks",
+                method: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({
+                    studentId: Number($("#markStudentId").val()),
+                    subject: $("#subject").val(),
+                    marks: Number($("#marks").val()),
+                    semester: Number($("#marksSemester").val())
+                }),
+                success: function (response) {
+                    showMessage("#adminMessage", response.message, "success");
+                    $("#marksForm")[0].reset();
+                },
+                error: function (xhr) {
+                    handleAjaxError(xhr, "#adminMessage");
+                }
+            });
+        });
+    });
+</script>
+</body>
+</html>
